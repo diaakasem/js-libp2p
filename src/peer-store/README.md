@@ -25,17 +25,17 @@ Several libp2p subsystems will perform operations that might gather relevant inf
 
 ## Retrieving records from the PeerStore
 
-When the PeerStore data is updated, this information might be important for different parties. As a consequence, PeerStore is an event based component that notifies interested parties about changes. Any subsystem interested in these notifications should subscribe the PeerStore events.
+When data in the PeerStore is updated the PeerStore will emit events based on the changes, to allow applications and other subsystems to take action on those changes. Any subsystem interested in these notifications should subscribe the [`PeerStore events`][peer-store-events].
 
 ### Peer
-- Each time a new peer is discovered, the PeerStore should emit a `peer` event, so that interested parties can leverage this peer and establish a connection with it.
+- Each time a new peer is discovered, the PeerStore should emit a [`peer` event][peer-store-events], so that interested parties can leverage this peer and establish a connection with it.
 
 ### Protocols
-- When the known protocols of a peer change, the PeerStore emits a `change:protocols` event.
+- When the known protocols of a peer change, the PeerStore emits a [`change:protocols` event][peer-store-events].
   - Libp2p topologies will be particularly interested in this, so that the subsystem can open streams with relevant peers for them
 
 ### Multiaddrs
-- When the known listening `multiaddrs` of a peer change, the PeerStore emits a `change:multiaddrs` event.
+- When the known listening `multiaddrs` of a peer change, the PeerStore emits a [`change:multiaddrs` event][peer-store-events].
 
 ## PeerStore implementation
 
@@ -94,3 +94,5 @@ Access to its underlying books:
 
 - If multiaddr TTLs are added, the PeerStore may schedule jobs to delete all addresses that exceed the TTL to prevent AddressBook bloating
 - Further API methods will probably need to be added in the context of multiaddr validity and confidence.
+
+[peer-store-events]: ../../doc/API.md#libp2ppeerstore
