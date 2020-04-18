@@ -127,11 +127,13 @@ class TransportManager {
   }
 
   /**
-   * Starts listeners for each given Multiaddr.
+   * Starts listeners for each listen Multiaddr.
+   * Update listen multiaddrs of the Address Manager after the operation.
    * @async
-   * @param {Multiaddr[]} addrs
    */
-  async listen (addrs) {
+  async listen () {
+    const addrs = this.libp2p.addressManager.listen
+
     if (addrs.length === 0) {
       log('no addresses were provided for listening, this node is dial only')
       return
@@ -174,6 +176,10 @@ class TransportManager {
     if (couldNotListen.length === this._transports.size) {
       throw errCode(new Error(`no valid addresses were provided for transports [${couldNotListen}]`), codes.ERR_NO_VALID_ADDRESSES)
     }
+
+    // The addresses may change once the listener starts
+    // eg /ip4/0.0.0.0/tcp/0 => /ip4/192.168.1.0/tcp/58751
+    this.libp2p.addressManager._replaceListen(this.getAddrs())
   }
 
   /**

@@ -25,10 +25,13 @@ describe('registrar on dial', () => {
   before(async () => {
     [peerId, remotePeerId] = await peerUtils.createPeerId({ number: 2 })
     remoteLibp2p = new Libp2p(mergeOptions(baseOptions, {
-      peerId: remotePeerId
+      peerId: remotePeerId,
+      addresses: {
+        listen: [listenAddr]
+      }
     }))
 
-    await remoteLibp2p.transportManager.listen([listenAddr])
+    await remoteLibp2p.transportManager.listen()
     remoteAddr = remoteLibp2p.transportManager.getAddrs()[0].encapsulate(`/p2p/${remotePeerId.toB58String()}`)
   })
 

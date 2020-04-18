@@ -11,6 +11,9 @@
   * [`handle`](#handle)
   * [`unhandle`](#unhandle)
   * [`ping`](#ping)
+  * [`addressManager.listen`](#addressManagerlisten)
+  * [`addressManager.announce`](#addressManagerannounce)
+  * [`addressManager.noAnnounce`](#addressManagernoannounce)
   * [`peerRouting.findPeer`](#peerroutingfindpeer)
   * [`contentRouting.findProviders`](#contentroutingfindproviders)
   * [`contentRouting.provide`](#contentroutingprovide)
@@ -355,6 +358,44 @@ Pings a given peer and get the operation's latency.
 ```js
 // ...
 const latency = await libp2p.ping(otherPeerId)
+```
+
+### addressManager.listen
+
+Getter for getting the addresses that the peer is using for listening on libp2p transports.
+
+`libp2p.addressManager.listen`
+
+#### Example
+
+```js
+// ...
+const listenAddresses = libp2p.addressManager.listen
+// [ <Multiaddr 047f00000106f9ba - /ip4/127.0.0.1/tcp/63930> ]
+```
+
+### addressManager.announce
+
+Getter for getting the addresses that the peer is announcing to other peers in the network.
+
+`libp2p.addressManager.announce`
+
+```js
+// ...
+const announceAddresses = libp2p.addressManager.announce
+// [ <Multiaddr 047f00000106f9ba - /dns4/peer.io/...> ]
+```
+
+### addressManager.noAnnounce
+
+Getter for getting the addresses that the peer is not announcing in the network.
+
+`libp2p.addressManager.noAnnounce`
+
+```js
+// ...
+const noAnnounceAddresses = libp2p.addressManager.noAnnounce
+// [ <Multiaddr 047f00000106f9ba - /ip4/127.0.0.1/tcp/63930> ]
 ```
 
 ### peerRouting.findPeer

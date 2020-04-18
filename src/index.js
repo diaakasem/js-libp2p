@@ -14,6 +14,7 @@ const getPeerId = require('./get-peer-id')
 const { validate: validateConfig } = require('./config')
 const { codes } = require('./errors')
 
+const AddressManager = require('./address-manager')
 const ConnectionManager = require('./connection-manager')
 const Circuit = require('./circuit')
 const Dialer = require('./dialer')
@@ -47,6 +48,7 @@ class Libp2p extends EventEmitter {
 
     // Addresses {listen, announce, noAnnounce}
     this.addresses = this._options.addresses
+    this.addressManager = new AddressManager(this._options.addresses)
 
     this._modules = this._options.modules
     this._config = this._options.config
@@ -139,7 +141,7 @@ class Libp2p extends EventEmitter {
       this.identifyService = new IdentifyService({
         registrar: this.registrar,
         peerId: this.peerId,
-        addresses: this.addresses,
+        addressManager: this.addressManager,
         protocols: this.upgrader.protocols
       })
       this.handle(Object.values(IDENTIFY_PROTOCOLS), this.identifyService.handleMessage)
@@ -203,6 +205,8 @@ class Libp2p extends EventEmitter {
    */
   async start () {
     log('libp2p is starting')
+    // TODO: consider validate listen addresses on start?
+    // depend on transports?
     try {
       await this._onStarting()
       await this._onDidStart()
@@ -366,14 +370,18 @@ class Libp2p extends EventEmitter {
   }
 
   async _onStarting () {
-    // Listen on the addresses provided
-    const multiaddrs = this.addresses.listen
-
-    await this.transportManager.listen(multiaddrs)
+    // Listen on the provided transports
+    await this.transportManager.listen()
 
     // The addresses may change once the listener starts
     // eg /ip4/0.0.0.0/tcp/0 => /ip4/192.168.1.0/tcp/58751
-    this.addresses.listen = this.transportManager.getAddrs()
+    // this.addressManager._replaceListen(this.transportManager.getAddrs())
+
+    // await this.transportManager.listen(multiaddrs)
+
+    // // The addresses may change once the listener starts
+    // // eg /ip4/0.0.0.0/tcp/0 => /ip4/192.168.1.0/tcp/58751
+    // this.addresses.listen = this.transportManager.getAddrs()
 
     if (this._config.pubsub.enabled) {
       this.pubsub && this.pubsub.start()
@@ -479,7 +487,7 @@ class Libp2p extends EventEmitter {
         if (typeof DiscoveryService === 'function') {
           discoveryService = new DiscoveryService(Object.assign({}, config, {
             peerId: this.peerId,
-            multiaddrs: this.addresses.listen,
+            multiaddrs: this.addressManager.announce,
             libp2p: this
           }))
         } else {

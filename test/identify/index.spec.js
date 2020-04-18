@@ -13,6 +13,7 @@ const duplexPair = require('it-pair/duplex')
 const multiaddr = require('multiaddr')
 const pWaitFor = require('p-wait-for')
 
+const AddressManager = require('../../src/address-manager')
 const { codes: Errors } = require('../../src/errors')
 const { IdentifyService, multicodecs } = require('../../src/identify')
 const Peers = require('../fixtures/peers')
@@ -44,9 +45,7 @@ describe('Identify', () => {
   it('should be able to identify another peer', async () => {
     const localIdentify = new IdentifyService({
       peerId: localPeer,
-      addresses: {
-        listen: []
-      },
+      addressManager: new AddressManager(),
       protocols,
       registrar: {
         peerStore: {
@@ -61,9 +60,7 @@ describe('Identify', () => {
     })
     const remoteIdentify = new IdentifyService({
       peerId: remotePeer,
-      addresses: {
-        listen: []
-      },
+      addressManager: new AddressManager(),
       protocols
     })
 
@@ -97,9 +94,7 @@ describe('Identify', () => {
   it('should throw if identified peer is the wrong peer', async () => {
     const localIdentify = new IdentifyService({
       peerId: localPeer,
-      addresses: {
-        listen: []
-      },
+      addressManager: new AddressManager(),
       protocols,
       registrar: {
         peerStore: {
@@ -114,9 +109,7 @@ describe('Identify', () => {
     })
     const remoteIdentify = new IdentifyService({
       peerId: remotePeer,
-      addresses: {
-        listen: []
-      },
+      addressManager: new AddressManager(),
       protocols
     })
 
@@ -147,9 +140,7 @@ describe('Identify', () => {
       const listeningAddr = multiaddr('/ip4/127.0.0.1/tcp/1234')
       const localIdentify = new IdentifyService({
         peerId: localPeer,
-        addresses: {
-          listen: [listeningAddr]
-        },
+        addressManager: new AddressManager({ listen: [listeningAddr] }),
         registrar: { getConnection: () => {} },
         protocols: new Map([
           [multicodecs.IDENTIFY],

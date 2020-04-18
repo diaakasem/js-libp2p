@@ -44,7 +44,7 @@ function _populateAddressBooks (peers) {
   for (let i = 0; i < peers.length; i++) {
     for (let j = 0; j < peers.length; j++) {
       if (i !== j) {
-        peers[i].peerStore.addressBook.set(peers[j].peerId, peers[j].addresses.listen)
+        peers[i].peerStore.addressBook.set(peers[j].peerId, peers[j].addressManager.announce)
       }
     }
   }

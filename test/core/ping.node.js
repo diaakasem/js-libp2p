@@ -21,8 +21,8 @@ describe('ping', () => {
       config: baseOptions
     })
 
-    nodes[0].peerStore.addressBook.set(nodes[1].peerId, nodes[1].addresses.listen)
-    nodes[1].peerStore.addressBook.set(nodes[0].peerId, nodes[0].addresses.listen)
+    nodes[0].peerStore.addressBook.set(nodes[1].peerId, nodes[1].addressManager.announce)
+    nodes[1].peerStore.addressBook.set(nodes[0].peerId, nodes[0].addressManager.announce)
   })
 
   it('ping once from peer0 to peer1', async () => {

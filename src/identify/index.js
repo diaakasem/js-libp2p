@@ -48,7 +48,7 @@ class IdentifyService {
    * @param {Registrar} options.registrar
    * @param {Map<string, handler>} options.protocols A reference to the protocols we support
    * @param {PeerId} options.peerId The peer running the identify service
-   * @param {{ listen: Array<Multiaddr>}} options.addresses The peer aaddresses
+   * @param {AddressManager} options.addressManager The peer address Manager
    */
   constructor (options) {
     /**
@@ -59,8 +59,10 @@ class IdentifyService {
      * @property {PeerId}
      */
     this.peerId = options.peerId
-
-    this.addresses = options.addresses || {}
+    /**
+     * @property {AddressManager}
+     */
+    this.addressManager = options.addressManager
 
     this._protocols = options.protocols
 
@@ -79,7 +81,7 @@ class IdentifyService {
 
         await pipe(
           [{
-            listenAddrs: this.addresses.listen.map((ma) => ma.buffer),
+            listenAddrs: this.addressManager.announce.map((ma) => ma.buffer),
             protocols: Array.from(this._protocols.keys())
           }],
           pb.encode(Message),
@@ -204,7 +206,7 @@ class IdentifyService {
       protocolVersion: PROTOCOL_VERSION,
       agentVersion: AGENT_VERSION,
       publicKey,
-      listenAddrs: this.addresses.listen.map((ma) => ma.buffer),
+      listenAddrs: this.addressManager.announce.map((ma) => ma.buffer),
       observedAddr: connection.remoteAddr.buffer,
       protocols: Array.from(this._protocols.keys())
     })
