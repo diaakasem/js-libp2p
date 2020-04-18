@@ -61,12 +61,12 @@ class Libp2p extends EventEmitter {
     this.upgrader = new Upgrader({
       localPeer: this.peerId,
       metrics: this.metrics,
+      // TODO: Identify should listen on connection Manager event
+      // and onConnection would only map to the connectionManager handler
       onConnection: (connection) => {
         const peerId = connection.remotePeer
 
-        this.registrar.onConnect(peerId, connection)
         this.connectionManager.onConnect(connection)
-        this.emit('peer:connect', peerId)
 
         // Run identify for every connection
         if (this.identifyService) {
@@ -74,24 +74,19 @@ class Libp2p extends EventEmitter {
             .catch(log.error)
         }
       },
+      // TODO: metrics should listen on connection Manager event
+      // and onConnectionEnd would only map to the connectionManager handler
       onConnectionEnd: (connection) => {
         const peerId = connection.remotePeer
 
-        this.registrar.onDisconnect(peerId, connection)
         this.connectionManager.onDisconnect(connection)
 
         // If there are no connections to the peer, disconnect
-        if (!this.registrar.getConnection(peerId)) {
-          this.emit('peer:disconnect', peerId)
-          this.metrics && this.metrics.onPeerDisconnected(peerId)
+        if (!this.connectionManager.get(peerId) && this.metrics) {
+          this.metrics.onPeerDisconnected(peerId)
         }
       }
     })
-
-    // Create the Registrar
-    this.registrar = new Registrar({ peerStore: this.peerStore })
-    this.handle = this.handle.bind(this)
-    this.registrar.handle = this.handle
 
     // Create the Connection Manager
     this.connectionManager = new ConnectionManager(this, this._options.connectionManager)
@@ -101,6 +96,15 @@ class Libp2p extends EventEmitter {
       libp2p: this,
       upgrader: this.upgrader
     })
+
+    // Create the Registrar
+    this.registrar = new Registrar({
+      peerStore: this.peerStore,
+      connectionManager: this.connectionManager
+    })
+
+    this.handle = this.handle.bind(this)
+    this.registrar.handle = this.handle
 
     // Attach crypto channels
     if (this._modules.connEncryption) {
@@ -137,7 +141,8 @@ class Libp2p extends EventEmitter {
 
       // Add the identify service since we can multiplex
       this.identifyService = new IdentifyService({
-        registrar: this.registrar,
+        peerStore: this.peerStore,
+        connectionManager: this.connectionManager,
         peerId: this.peerId,
         addresses: this.addresses,
         protocols: this.upgrader.protocols
@@ -239,7 +244,6 @@ class Libp2p extends EventEmitter {
       ])
 
       await this.transportManager.close()
-      await this.registrar.close()
 
       ping.unmount(this)
       this.dialer.destroy()
@@ -291,7 +295,7 @@ class Libp2p extends EventEmitter {
    */
   async dialProtocol (peer, protocols, options) {
     const peerId = getPeerId(peer, this.peerStore)
-    let connection = this.registrar.getConnection(peerId)
+    let connection = this.connectionManager.get(peerId)
 
     if (!connection) {
       connection = await this.dialer.connectToPeer(peer, options)
@@ -314,7 +318,7 @@ class Libp2p extends EventEmitter {
     const peerId = getPeerId(peer)
 
     return Promise.all(
-      this.registrar.connections.get(peerId.toB58String()).map(connection => {
+      this.connectionManager.connections.get(peerId.toB58String()).map(connection => {
         return connection.close()
       })
     )
@@ -441,9 +445,9 @@ class Libp2p extends EventEmitter {
    */
   async _maybeConnect (peerId) {
     // If auto dialing is on and we have no connection to the peer, check if we should dial
-    if (this._config.peerDiscovery.autoDial === true && !this.registrar.getConnection(peerId)) {
+    if (this._config.peerDiscovery.autoDial === true && !this.connectionManager.get(peerId)) {
       const minPeers = this._options.connectionManager.minPeers || 0
-      if (minPeers > this.connectionManager._connections.size) {
+      if (minPeers > this.connectionManager.size) {
         log('connecting to discovered peer %s', peerId.toB58String())
         try {
           await this.dialer.connectToPeer(peerId)

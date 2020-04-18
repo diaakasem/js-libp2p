@@ -45,16 +45,23 @@ class IdentifyService {
   /**
    * @constructor
    * @param {object} options
-   * @param {Registrar} options.registrar
+   * @param {PeerStore} options.peerStore
+   * @param {ConnectionManager} options.connectionManager
    * @param {Map<string, handler>} options.protocols A reference to the protocols we support
    * @param {PeerId} options.peerId The peer running the identify service
    * @param {{ listen: Array<Multiaddr>}} options.addresses The peer aaddresses
    */
   constructor (options) {
     /**
-     * @property {Registrar}
+     * @property {PeerStore}
      */
-    this.registrar = options.registrar
+    this.peerStore = options.peerStore
+
+    /**
+     * @property {ConnectionManager}
+     */
+    this.connectionManager = options.connectionManager
+
     /**
      * @property {PeerId}
      */
@@ -103,7 +110,7 @@ class IdentifyService {
     const connections = []
     let connection
     for (const peer of peerStore.peers.values()) {
-      if (peer.protocols.includes(MULTICODEC_IDENTIFY_PUSH) && (connection = this.registrar.getConnection(peer.id))) {
+      if (peer.protocols.includes(MULTICODEC_IDENTIFY_PUSH) && (connection = this.connectionManager.get(peer.id))) {
         connections.push(connection)
       }
     }
@@ -159,8 +166,8 @@ class IdentifyService {
     observedAddr = IdentifyService.getCleanMultiaddr(observedAddr)
 
     // Update peers data in PeerStore
-    this.registrar.peerStore.addressBook.set(id, listenAddrs.map((addr) => multiaddr(addr)))
-    this.registrar.peerStore.protoBook.set(id, protocols)
+    this.peerStore.addressBook.set(id, listenAddrs.map((addr) => multiaddr(addr)))
+    this.peerStore.protoBook.set(id, protocols)
 
     // TODO: Track our observed address so that we can score it
     log('received observed address of %s', observedAddr)
@@ -244,13 +251,13 @@ class IdentifyService {
     // Update peers data in PeerStore
     const id = connection.remotePeer
     try {
-      this.registrar.peerStore.addressBook.set(id, message.listenAddrs.map((addr) => multiaddr(addr)))
+      this.peerStore.addressBook.set(id, message.listenAddrs.map((addr) => multiaddr(addr)))
     } catch (err) {
       return log.error('received invalid listen addrs', err)
     }
 
     // Update the protocols
-    this.registrar.peerStore.protoBook.set(id, message.protocols)
+    this.peerStore.protoBook.set(id, message.protocols)
   }
 }
 

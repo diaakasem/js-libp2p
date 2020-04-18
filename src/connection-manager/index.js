@@ -6,6 +6,11 @@ const LatencyMonitor = require('latency-monitor').default
 const debug = require('debug')('libp2p:connection-manager')
 const retimer = require('retimer')
 
+const { EventEmitter } = require('events')
+
+const PeerId = require('peer-id')
+const { Connection } = require('libp2p-interfaces/src/connection')
+
 const {
   ERR_INVALID_PARAMETERS
 } = require('../errors')
@@ -22,7 +27,12 @@ const defaultOptions = {
   defaultPeerValue: 1
 }
 
-class ConnectionManager {
+/**
+ * Responsible for managing known connections.
+ * @fires ConnectionManager#peer:connect Emitted when a new peer is connected.
+ * @fires ConnectionManager#peer:disconnect Emitted when a known peer supports a different set of protocols.
+ */
+class ConnectionManager extends EventEmitter {
   /**
    * @constructor
    * @param {Libp2p} libp2p
@@ -38,9 +48,11 @@ class ConnectionManager {
    * @param {Number} options.defaultPeerValue The value of the peer. Default=1
    */
   constructor (libp2p, options) {
+    super()
+
     this._libp2p = libp2p
-    this._registrar = libp2p.registrar
     this._peerId = libp2p.peerId.toB58String()
+
     this._options = mergeOptions.call({ ignoreUndefined: true }, defaultOptions, options)
     if (this._options.maxConnections < this._options.minConnections) {
       throw errcode(new Error('Connection Manager maxConnections must be greater than minConnections'), ERR_INVALID_PARAMETERS)
@@ -50,10 +62,28 @@ class ConnectionManager {
 
     this._metrics = libp2p.metrics
 
+    /**
+     * Map of peer identifiers to their peer value for pruning connections.
+     * @type {Map<string, number>}
+     */
     this._peerValues = new Map()
-    this._connections = new Map()
+
+    /**
+     * Map of connections per peer
+     * @type {Map<string, Array<conn>>}
+     */
+    this.connections = new Map()
+
     this._timer = null
     this._checkMetrics = this._checkMetrics.bind(this)
+  }
+
+  /**
+   * Get current number of open connections.
+   */
+  get size () {
+    return Array.from(this.connections.values())
+      .reduce((accumulator, value) => accumulator + value.length, 0)
   }
 
   /**
@@ -77,11 +107,31 @@ class ConnectionManager {
 
   /**
    * Stops the Connection Manager
+   * @async
    */
-  stop () {
+  async stop () {
     this._timer && this._timer.clear()
     this._latencyMonitor && this._latencyMonitor.removeListener('data', this._onLatencyMeasure)
+
+    await this._close()
     debug('stopped')
+  }
+
+  /**
+   * Cleans up the connections
+   * @async
+   */
+  async _close () {
+    // Close all connections we're tracking
+    const tasks = []
+    for (const connectionList of this.connections.values()) {
+      for (const connection of connectionList) {
+        tasks.push(connection.close())
+      }
+    }
+
+    await tasks
+    this.connections.clear()
   }
 
   /**
@@ -122,12 +172,26 @@ class ConnectionManager {
    * @param {Connection} connection
    */
   onConnect (connection) {
-    const peerId = connection.remotePeer.toB58String()
-    this._connections.set(connection.id, connection)
-    if (!this._peerValues.has(peerId)) {
-      this._peerValues.set(peerId, this._options.defaultPeerValue)
+    if (!Connection.isConnection(connection)) {
+      throw errcode(new Error('conn must be an instance of interface-connection'), ERR_INVALID_PARAMETERS)
     }
-    this._checkLimit('maxConnections', this._connections.size)
+
+    const peerId = connection.remotePeer
+    const peerIdStr = peerId.toB58String()
+    const storedConn = this.connections.get(peerIdStr)
+
+    if (storedConn) {
+      storedConn.push(connection)
+    } else {
+      this.connections.set(peerIdStr, [connection])
+      this.emit('peer:connect', peerId)
+    }
+
+    if (!this._peerValues.has(peerIdStr)) {
+      this._peerValues.set(peerIdStr, this._options.defaultPeerValue)
+    }
+
+    this._checkLimit('maxConnections', this.size)
   }
 
   /**
@@ -135,8 +199,38 @@ class ConnectionManager {
    * @param {Connection} connection
    */
   onDisconnect (connection) {
-    this._connections.delete(connection.id)
-    this._peerValues.delete(connection.remotePeer.toB58String())
+    const peerId = connection.remotePeer
+    const peerIdStr = peerId.toB58String()
+    let storedConn = this.connections.get(peerIdStr)
+
+    if (storedConn && storedConn.length > 1) {
+      storedConn = storedConn.filter((conn) => conn.id !== connection.id)
+      this.connections.set(peerIdStr, storedConn)
+    } else if (storedConn) {
+      this.connections.delete(peerIdStr)
+      this._peerValues.delete(connection.remotePeer.toB58String())
+      this.emit('peer:disconnect', peerId)
+    }
+  }
+
+  /**
+   * Get a connection with a peer.
+   * @param {PeerId} peerId
+   * @returns {Connection}
+   */
+  get (peerId) {
+    if (!PeerId.isPeerId(peerId)) {
+      throw errcode(new Error('peerId must be an instance of peer-id'), ERR_INVALID_PARAMETERS)
+    }
+
+    const id = peerId.toB58String()
+    const connections = this.connections.get(id)
+
+    // Return the first, open connection
+    if (connections) {
+      return connections.find(connection => connection.stat.status === 'open')
+    }
+    return null
   }
 
   /**
@@ -169,7 +263,7 @@ class ConnectionManager {
    * @private
    */
   _maybeDisconnectOne () {
-    if (this._options.minConnections < this._connections.size) {
+    if (this._options.minConnections < this.connections.size) {
       const peerValues = Array.from(this._peerValues).sort(byPeerValue)
       debug('%s: sorted peer values: %j', this._peerId, peerValues)
       const disconnectPeer = peerValues[0]
@@ -177,9 +271,9 @@ class ConnectionManager {
         const peerId = disconnectPeer[0]
         debug('%s: lowest value peer is %s', this._peerId, peerId)
         debug('%s: closing a connection to %j', this._peerId, peerId)
-        for (const connection of this._connections.values()) {
-          if (connection.remotePeer.toB58String() === peerId) {
-            connection.close()
+        for (const connections of this.connections.values()) {
+          if (connections[0].remotePeer.toB58String() === peerId) {
+            connections[0].close()
             break
           }
         }
